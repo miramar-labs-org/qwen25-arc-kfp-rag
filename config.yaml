@@ -12,8 +12,8 @@ embedding:
   batch_size: 64
 
 llm:
-  base_url: "http://localhost:8000/v1"  # OpenAI-compatible endpoint — set to your active serving project
-  model: "my-model"                     # served model alias (must match what the endpoint serves)
+  base_url: "http://vllm.qwen25-7b-ftuned-serving-vllm.svc.cluster.local:8000/v1"
+  model: "qwen25-arc"                   # served model alias (must match what the endpoint serves)
   top_k: 5                              # number of retrieved chunks to include in RAG context
   max_new_tokens: 512
 
