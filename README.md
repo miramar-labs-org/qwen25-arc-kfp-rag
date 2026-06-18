@@ -88,7 +88,22 @@ Each row must be valid JSON:
 
 ---
 
-## 5. MLflow
+## 5. RAGAS-style evaluation
+
+This project does not depend on the `ragas` Python package, but follows the same evaluation pattern:
+retrieval quality, answer quality, faithfulness/grounding, and safety.
+
+| RAGAS concept | This project |
+|---|---|
+| Context recall | recall@1, recall@5, hit_rate |
+| Context precision | citation_coverage, unsupported_claim_rate |
+| Faithfulness | faithfulness score |
+| Answer relevancy | answer_correctness, fact_coverage |
+| Safety / deployment readiness | safety_score, deployment_gate |
+
+---
+
+## 6. MLflow
 
 Each component logs metrics to MLflow. Access the UI:
 
@@ -108,7 +123,7 @@ Key metrics logged per run:
 
 ---
 
-## 6. Qdrant
+## 7. Qdrant
 
 The platform runs Qdrant at `http://qdrant.qdrant-system.svc.cluster.local:6333` (in-cluster).
 Access from the DGX host:
@@ -124,7 +139,7 @@ Collections persist between pipeline runs — only the most recent ingest's data
 
 ---
 
-## 7. LangSmith (optional)
+## 8. LangSmith (optional)
 
 Enable tracing to LangSmith for distributed trace inspection of the RAG chain:
 
@@ -133,7 +148,7 @@ Enable tracing to LangSmith for distributed trace inspection of the RAG chain:
 
 ---
 
-## 8. Kubeflow Pipelines UI
+## 9. Kubeflow Pipelines UI
 
 ```sh
 ssh -L 8080:localhost:8080 <user>@spark-79b7.local
