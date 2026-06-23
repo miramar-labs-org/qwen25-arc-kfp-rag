@@ -226,3 +226,67 @@ On gate pass, `deployment_gate` writes:
 
 This file records the collection name, all metric values, and the gate verdict. Use it to confirm
 which Qdrant collection passed eval before pointing downstream applications at it.
+
+---
+
+## Implementation Notes (what was built here)
+
+### Domain — ARC-Challenge science QA
+
+Documents in `docs_src/`:
+- `arc-science-context.txt` — reference science facts derived from ARC-Challenge training examples
+- `openbookqa-facts.txt` — complementary core science facts from OpenBookQA
+
+These are curated plain-text knowledge bases (not raw web crawl) so chunk quality is high and
+retrieval precision is predictable. Each chunk maps cleanly to one or a few ARC questions.
+
+`eval_dataset.jsonl` contains ARC-Challenge test questions with `gold_doc_ids` pointing to specific
+documents so retrieval recall can be computed meaningfully.
+
+### Embedding — BAAI/bge-small-en-v1.5
+
+Small (33M param), CPU-capable, strong performance on retrieval benchmarks. Cached to PVC
+after first run so subsequent runs don't re-download. Chunk size 512 tokens, overlap 50.
+
+### LLM — qwen25-arc (Qwen 2.5 7B fine-tuned adapter)
+
+Served by the `qwen25-7b-ftuned-serving-vllm` project on the cluster. The fine-tuned adapter
+knows ARC-domain vocabulary better than the base model, improving answer accuracy on science questions.
+
+### Judge — phi4 via Ollama
+
+`phi4` runs on Ollama (host port 11434) on the DGX. All three eval stages (generation, faithfulness,
+safety) use `phi4` as the judge. All judge calls include `timeout=60` to prevent hangs when
+Ollama shares unified memory with vLLM.
+
+### `retrieval_eval` — what was implemented
+
+Embeds each question with `bge-small`, queries Qdrant `query_points` (not deprecated `.search()`),
+tracks `hit_count` (any retrieval), `recall_1_hits`, `recall_5_hits`, and `mrr_sum` only for rows
+with `gold_doc_ids`. Rows without gold labels count toward `hit_rate` but not toward recall/MRR.
+
+**Expected metrics:** recall@5 ≥ 0.75, MRR ≥ 0.60 (ARC docs are well-matched to questions).
+
+### `generation_eval` — what was implemented
+
+RAG prompt builds context as `[doc_id] text` blocks, asks vLLM for an answer, then judges
+correctness and fact coverage with `phi4`. A regex fallback extracts JSON if the judge wraps
+output in markdown code fences. Saves `generation_results.jsonl` with full answer + score per row.
+
+Follows the system-message form: judge prompt is the `system` role, question+answer is `user`.
+`timeout=60` on every judge call (see CLAUDE.md rule).
+
+### `faithfulness_eval` — what was implemented
+
+Reads `generation_results.jsonl`, sends each answer + its cited doc IDs to `phi4` to judge
+whether claims are supported. JSON parsing with regex fallback. Aggregates
+`avg_faithfulness`, `avg_citation_coverage`, `unsupported_claim_rate`.
+
+### `safety_eval` — what was implemented
+
+Reads same `generation_results.jsonl`, sends question + answer to `phi4` safety judge.
+Collects numeric scores, computes `avg_safety` and `unsafe_rate` (fraction of FAIL verdicts).
+
+### `deployment_gate` — fully implemented by template
+
+Checks all four thresholds from `config.yaml` and writes `gate_result.json` with pass/fail verdict.
